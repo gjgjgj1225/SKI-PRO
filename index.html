@@ -343,8 +343,9 @@ function rMain(){
     const fp=finalPrice(p);
     const lowStock=p.stock!==undefined&&p.stock<=3;
     const priceHtml=disc>0?`<div class="pc-price">${fp} ₽ <span style="text-decoration:line-through;color:var(--ice-dark-m);font-size:12px;font-weight:400;">${r0(p.price)} ₽</span><br><span style="background:var(--accent);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;font-weight:600;">-${disc}%</span></div>`:`<div class="pc-price">${r0(p.price)} ₽</div>`;
+    const imgContent = p.img && p.img.startsWith('data:') ? `<img src="${p.img}" style="width:100%;height:100%;object-fit:cover;">` : p.img;
     return `<div class="pc" data-action="openProduct" data-pid="${p.id}">
-      <div class="pc-img">${p.img}</div>
+      <div class="pc-img">${imgContent}</div>
       <div class="pc-body">
         <div class="pc-name">${esc(p.name)}</div>
         <div class="pc-desc">${esc(p.desc||'')}</div>
@@ -372,8 +373,9 @@ function rProduct(){
   const disc=p.discount||0,fp=finalPrice(p);
   const priceHtml=disc>0?`<div class="det-price">${fp} ₽ <span style="text-decoration:line-through;color:var(--ice-dark-m);font-size:18px;font-weight:400;">${r0(p.price)} ₽</span> <span style="background:var(--accent);color:#fff;font-size:12px;padding:3px 8px;border-radius:8px;font-weight:600;vertical-align:middle;">-${disc}%</span></div>`:`<div class="det-price">${r0(p.price)} ₽</div>`;
   const stockHtml=p.stock!==undefined?`<div class="badge ${p.stock<=3?'':'g'}" style="${p.stock<=3?'background:#ffe0d6;color:var(--accent);border-color:#ffc7b3;':''}">${p.stock>0?'В наличии: '+p.stock+' шт':'Нет в наличии'}</div>`:'';
+  const imgContent = p.img && p.img.startsWith('data:') ? `<img src="${p.img}" style="width:100%;height:100%;object-fit:cover;">` : p.img;
   return `<button class="back-btn" data-action="goBack">← Назад</button>
-  <div class="det-img">${p.img}</div>
+  <div class="det-img">${imgContent}</div>
   <div class="det-meta"><span class="badge g">${p.cat}</span><span class="badge">${esc(p.brand)}</span>${stockHtml}</div>
   <div class="det-title">${esc(p.name)}</div>
   ${priceHtml}
@@ -487,7 +489,6 @@ const screenClickHandlers=new WeakMap();
 function updateQtyControlsInPlace(pid,size){
   const q=cq(pid);
   const el=$('s-'+CS);if(!el)return;
-  // update all qty inputs/buttons for this product+size on screen
   el.querySelectorAll(`[data-action="qi"][data-pid="${pid}"]`).forEach(inp=>{
     const inpSize=inp.dataset.size||'One Size';
     if(inpSize===size||(!inp.dataset.size&&size==='One Size')){
@@ -499,14 +500,12 @@ function updateQtyControlsInPlace(pid,size){
       }
     }
   });
-  // update nav cart badge without full nav rebuild
   const badge=$('nav').querySelector('.nbadge');
   const cnt=cartCount();
   if(cnt>0){
     if(badge)badge.textContent=cnt;
     else renderNav();
   }else if(badge){renderNav();}
-  // if we're on the product detail screen, refresh the "in cart" summary line
   if(CS==='product'&&detailId===pid){
     const p=gp(pid);
     if(p){
@@ -521,7 +520,6 @@ function updateQtyControlsInPlace(pid,size){
       }
     }
   }
-  // if we're in the cart, item sums and totals need a full refresh (cheap enough, cart is small)
   if(CS==='cart')render();
 }
 
@@ -602,7 +600,9 @@ function addProductModal(){
   <label class="ilabel">Размеры (выберите несколько)</label>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">${sizeOpts.map(s=>`<div><label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" class="pSize" value="${s}" style="cursor:pointer;"> ${s}</label></div>`).join('')}</div>
   <input class="inp" id="pDesc" placeholder="Описание товара">
-  <input class="inp" id="pEmoji" placeholder="Эмодзи (🎿 🧣 и т.д.)" maxlength="2">
+  <label class="ilabel">Фото товара</label>
+  <input type="file" accept="image/*" id="pPhoto" style="margin-bottom:8px;">
+  <img id="pPhotoPreview" style="max-width:100%;max-height:120px;display:none;border-radius:12px;margin-bottom:8px;">
   <button class="btn btn-p" id="saveProdBtn">Добавить товар</button>`;
 }
 
@@ -610,6 +610,7 @@ function editProductModal(p){
   const sizeOpts=['XS','S','M','L','XL','One Size'];
   const discOpts=[0,10,15,20,30];
   const curDisc=p.discount||0;
+  const currentImg = p.img && p.img.startsWith('data:') ? p.img : '';
   return`<div class="sh-title">Редактировать товар</div>
   <input class="inp" id="pName" placeholder="Название товара" value="${esc(p.name)}" maxlength="60">
   <select class="inp" id="pBrand"><option value="">Выберите бренд</option>${BRANDS.filter(b=>b!=='Все').map(b=>`<option value="${b}" ${p.brand===b?'selected':''}>${b}</option>`).join('')}</select>
@@ -622,24 +623,56 @@ function editProductModal(p){
   <label class="ilabel">Размеры (выберите несколько)</label>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">${sizeOpts.map(s=>`<div><label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" class="pSize" value="${s}" ${p.sizes.includes(s)?'checked':''} style="cursor:pointer;"> ${s}</label></div>`).join('')}</div>
   <input class="inp" id="pDesc" placeholder="Описание товара" value="${esc(p.desc||'')}">
-  <input class="inp" id="pEmoji" placeholder="Эмодзи (🎿 🧣 и т.д.)" value="${p.img}" maxlength="2">
+  <label class="ilabel">Фото товара</label>
+  <input type="file" accept="image/*" id="pPhoto" style="margin-bottom:8px;">
+  <img id="pPhotoPreview" style="max-width:100%;max-height:120px;border-radius:12px;margin-bottom:8px;${currentImg ? '' : 'display:none;'}" src="${currentImg}">
   <button class="btn btn-p" id="saveProdBtn" data-pid="${p.id}">Сохранить изменения</button>`;
 }
 
 document.addEventListener('click',e=>{
   if(e.target.id==='saveProdBtn'){
-    const name=document.querySelector('#pName')?.value.trim(),brand=document.querySelector('#pBrand')?.value.trim(),
-        cat=document.querySelector('#pCat')?.value.trim(),price=parseFloat(document.querySelector('#pPrice')?.value),
-        stockRaw=document.querySelector('#pStock')?.value,stock=stockRaw===''?0:parseInt(stockRaw,10),
+    const name=document.querySelector('#pName')?.value.trim(),
+        brand=document.querySelector('#pBrand')?.value.trim(),
+        cat=document.querySelector('#pCat')?.value.trim(),
+        price=parseFloat(document.querySelector('#pPrice')?.value),
+        stockRaw=document.querySelector('#pStock')?.value,
+        stock=stockRaw===''?0:parseInt(stockRaw,10),
         discount=parseInt(document.querySelector('#pDiscount')?.value||'0',10),
-        desc=document.querySelector('#pDesc')?.value.trim(),emoji=document.querySelector('#pEmoji')?.value.trim(),
+        desc=document.querySelector('#pDesc')?.value.trim(),
         sizes=Array.from(document.querySelectorAll('.pSize:checked')).map(c=>c.value);
-    if(!name||!brand||!cat||!price||sizes.length===0||!emoji){toast('Заполните все поля и выберите размеры');return;}
+    const photoInput = document.querySelector('#pPhoto');
+    const file = photoInput && photoInput.files[0];
+    const pid = e.target.dataset.pid;
+
+    if(!name||!brand||!cat||!price||sizes.length===0){toast('Заполните все поля и выберите размеры');return;}
+    if(!pid && !file){toast('Выберите фото товара');return;}
     if(isNaN(stock)||stock<0){toast('Укажите корректное количество на складе');return;}
-    const pid=e.target.dataset.pid;
-    if(pid){const p=gp(pid);if(p){p.name=name;p.brand=brand;p.cat=cat;p.price=r0(price);p.sizes=sizes;p.desc=desc;p.img=emoji;p.stock=stock;p.discount=discount;}saveNow();toast('Товар обновлён');}
-    else{S.products.push({id:genId(),name,brand,cat,price:r0(price),sizes,desc,img:emoji,stock,discount});saveNow();toast('Товар добавлен');}
-    closeModal();render();
+
+    const processSave = (imgData) => {
+      if(pid){
+        const p=gp(pid);
+        if(p){
+          p.name=name; p.brand=brand; p.cat=cat; p.price=r0(price); p.sizes=sizes; p.desc=desc;
+          p.stock=stock; p.discount=discount;
+          if(imgData) p.img = imgData;
+        }
+        saveNow(); toast('Товар обновлён');
+      } else {
+        S.products.push({
+          id:genId(), name, brand, cat, price:r0(price), sizes, desc, img: imgData, stock, discount
+        });
+        saveNow(); toast('Товар добавлен');
+      }
+      closeModal(); render();
+    };
+
+    if(file){
+      const reader = new FileReader();
+      reader.onload = (ev) => processSave(ev.target.result);
+      reader.readAsDataURL(file);
+    } else {
+      processSave(null);
+    }
   }
 });
 
@@ -684,6 +717,24 @@ function bindModal(ov){
   const apf=ov.querySelector('#applyFlt'),clf=ov.querySelector('#clearFlt');
   if(apf)apf.onclick=()=>{fltSort=ov.querySelector('#fSort').value;activeBrand=ov.querySelector('#fBrand').value;closeModal();render();};
   if(clf)clf.onclick=()=>{fltSort='none';activeBrand='Все';closeModal();render();};
+
+  const photoInput = ov.querySelector('#pPhoto');
+  if(photoInput){
+    photoInput.addEventListener('change', function(){
+      const file = this.files[0];
+      const preview = ov.querySelector('#pPhotoPreview');
+      if(file){
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          preview.src = e.target.result;
+          preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        preview.style.display = 'none';
+      }
+    });
+  }
 }
 
 function loginModal(){
